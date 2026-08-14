@@ -1,0 +1,71 @@
+import express from 'express';
+import cors from 'cors';
+import helmet from 'helmet';
+import rateLimit from 'express-rate-limit';
+import { createServer } from 'http';
+import { Server as SocketServer } from 'socket.io';
+import dotenv from 'dotenv';
+
+import callsRouter from './routes/calls';
+import customersRouter from './routes/customers';
+import appointmentsRouter from './routes/appointments';
+import knowledgeRouter from './routes/knowledge';
+
+dotenv.config();
+
+const app = express();
+const server = createServer(app);
+const io = new SocketServer(server, {
+  cors: {
+    origin: process.env.CLIENT_URL || 'http://localhost:3000',
+    methods: ['GET', 'POST'],
+  },
+});
+
+// Middleware
+app.use(helmet());
+app.use(cors({
+  origin: process.env.CLIENT_URL || 'http://localhost:3000',
+  credentials: true,
+}));
+app.use(express.json());
+
+// Rate limiting
+const limiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: 100,
+});
+app.use('/api', limiter);
+
+// Routes
+app.use('/api/calls', callsRouter);
+app.use('/api/customers', customersRouter);
+app.use('/api/appointments', appointmentsRouter);
+app.use('/api/knowledge', knowledgeRouter);
+
+// Health check
+app.get('/health', (req, res) => {
+  res.json({ status: 'ok', timestamp: new Date().toISOString() });
+});
+
+// Socket.io for real-time updates
+io.on('connection', (socket) => {
+  console.log('Client connected:', socket.id);
+
+  socket.on('join-call', (callId) => {
+    socket.join(`call-${callId}`);
+  });
+
+  socket.on('transcript-update', (data) => {
+    io.to(`call-${data.callId}`).emit('transcript', data);
+  });
+
+  socket.on('disconnect', () => {
+    console.log('Client disconnected:', socket.id);
+  });
+});
+
+const PORT = process.env.PORT || 3001;
+server.listen(PORT, () => {
+  console.log(`🚀 API server running on port ${PORT}`);
+});

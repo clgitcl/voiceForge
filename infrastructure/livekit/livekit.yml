@@ -1,0 +1,17 @@
+port: 7880
+rtc:
+  udp_port: 7882
+  tcp_port: 7881
+  use_external_ip: false
+  node_ip: 0.0.0.0
+  
+keys:
+  devkey: devsecret
+
+redis:
+  address: redis:6379
+  db: 0
+
+webhook:
+  urls:
+    - http://api:3001/api/calls/webhook

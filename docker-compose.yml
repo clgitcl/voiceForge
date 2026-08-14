@@ -1,0 +1,130 @@
+version: '3.8'
+
+services:
+  postgres:
+    image: postgres:15
+    environment:
+      POSTGRES_USER: voiceforge
+      POSTGRES_PASSWORD: voiceforge123
+      POSTGRES_DB: voiceforge
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./infrastructure/postgres/init.sql:/docker-entrypoint-initdb.d/init.sql
+    networks:
+      - voiceforge-network
+
+  livekit:
+    image: livekit/livekit-server:v1.4.0
+    ports:
+      - "7880:7880"
+      - "7881:7881"
+      - "7882:7882/udp"
+    environment:
+      - LIVEKIT_API_KEY=devkey
+      - LIVEKIT_API_SECRET=devsecret
+      - LIVEKIT_REDIS_URL=redis://redis:6379
+    volumes:
+      - ./infrastructure/livekit/livekit.yaml:/etc/livekit.yaml
+    command: --config /etc/livekit.yaml
+    networks:
+      - voiceforge-network
+
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    networks:
+      - voiceforge-network
+
+  ollama:
+    image: ollama/ollama:latest
+    ports:
+      - "11434:11434"
+    volumes:
+      - ollama_data:/root/.ollama
+      - ./infrastructure/ollama/Modelfile:/Modelfile
+    networks:
+      - voiceforge-network
+    command: serve
+
+  api:
+    build:
+      context: ./apps/api
+      dockerfile: Dockerfile
+    ports:
+      - "3001:3001"
+    environment:
+      - DATABASE_URL=postgresql://voiceforge:voiceforge123@postgres:5432/voiceforge
+      - LIVEKIT_API_KEY=devkey
+      - LIVEKIT_API_SECRET=devsecret
+      - LIVEKIT_URL=http://livekit:7880
+      - OLLAMA_URL=http://ollama:11434
+    depends_on:
+      - postgres
+      - livekit
+      - redis
+      - ollama
+    networks:
+      - voiceforge-network
+    volumes:
+      - ./apps/api:/app
+      - /app/node_modules
+
+  agent:
+    build:
+      context: ./apps/agent
+      dockerfile: Dockerfile
+    environment:
+      - API_URL=http://api:3001
+      - OLLAMA_URL=http://ollama:11434
+      - LIVEKIT_URL=http://livekit:7880
+      - LIVEKIT_API_KEY=devkey
+      - LIVEKIT_API_SECRET=devsecret
+    depends_on:
+      - api
+      - livekit
+      - ollama
+    networks:
+      - voiceforge-network
+    volumes:
+      - ./apps/agent:/app
+
+  web:
+    build:
+      context: ./apps/web
+      dockerfile: Dockerfile
+    ports:
+      - "3000:3000"
+    environment:
+      - VITE_API_URL=http://localhost:3001
+      - VITE_LIVEKIT_URL=ws://localhost:7880
+    depends_on:
+      - api
+    networks:
+      - voiceforge-network
+    volumes:
+      - ./apps/web:/app
+      - /app/node_modules
+
+  nginx:
+    image: nginx:alpine
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./infrastructure/nginx/nginx.conf:/etc/nginx/nginx.conf
+    depends_on:
+      - web
+      - api
+    networks:
+      - voiceforge-network
+
+networks:
+  voiceforge-network:
+    driver: bridge
+
+volumes:
+  postgres_data:
+  ollama_data:
