@@ -1,5 +1,5 @@
 import express from 'express';
-import { AccessToken } from 'livekit-server-sdk';
+import { AccessToken, AgentDispatchClient } from 'livekit-server-sdk';
 import { PrismaClient } from '@prisma/client';
 import { v4 as uuidv4 } from 'uuid';
 
@@ -42,6 +42,14 @@ router.post('/start', async (req, res) => {
         agentId: 'default-agent',
       },
     });
+
+const dispatchClient = new AgentDispatchClient(
+  process.env.LIVEKIT_URL || 'http://livekit:7880',
+  process.env.LIVEKIT_API_KEY || 'devkey',
+  process.env.LIVEKIT_API_SECRET || 'devsecret'
+);
+
+await dispatchClient.createDispatch(roomName, 'voiceforge-agent');
 
     res.json({
       callId,

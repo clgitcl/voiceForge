@@ -1,0 +1,91 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model Customer {
+  id           String        @id @default(uuid()) @db.Uuid
+  name         String
+  phone        String
+  email        String?
+  notes        String?
+  createdAt    DateTime      @default(now()) @map("created_at")
+  updatedAt    DateTime      @default(now()) @map("updated_at")
+
+  calls        Call[]
+  appointments Appointment[]
+
+  @@map("customers")
+}
+
+model Call {
+  id           String       @id @default(uuid()) @db.Uuid
+  roomName     String       @map("room_name")
+  customerId   String?      @db.Uuid @map("customer_id")
+  agentId      String?      @map("agent_id")
+  status       String       @default("active")
+  startedAt    DateTime     @default(now()) @map("started_at")
+  endedAt      DateTime?    @map("ended_at")
+  duration     Int?
+  recordingUrl String?      @map("recording_url")
+  createdAt    DateTime     @default(now()) @map("created_at")
+  updatedAt    DateTime     @default(now()) @map("updated_at")
+
+  customer     Customer?    @relation(fields: [customerId], references: [id])
+  transcript   Transcript[]
+
+  @@index([customerId])
+  @@index([status])
+  @@index([startedAt])
+  @@map("calls")
+}
+
+model Transcript {
+  id         String   @id @default(uuid()) @db.Uuid
+  callId     String?  @db.Uuid @map("call_id")
+  speaker    String
+  text       String
+  timestamp  DateTime @default(now())
+  confidence Float?
+
+  call       Call?    @relation(fields: [callId], references: [id], onDelete: Cascade)
+
+  @@index([callId])
+  @@map("transcripts")
+}
+
+model Appointment {
+  id         String    @id @default(uuid()) @db.Uuid
+  customerId String?   @db.Uuid @map("customer_id")
+  date       DateTime
+  duration   Int       @default(30)
+  type       String?
+  status     String    @default("scheduled")
+  notes      String?
+  createdAt  DateTime  @default(now()) @map("created_at")
+  updatedAt  DateTime  @default(now()) @map("updated_at")
+
+  customer   Customer? @relation(fields: [customerId], references: [id])
+
+  @@index([customerId])
+  @@index([date])
+  @@map("appointments")
+}
+
+model KnowledgeBase {
+  id        String   @id @default(uuid()) @db.Uuid
+  title     String
+  content   String
+  category  String?
+  tags      String[]
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @default(now()) @map("updated_at")
+
+  @@index([category])
+  @@map("knowledge_base")
+}
+

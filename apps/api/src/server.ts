@@ -6,18 +6,21 @@ import { createServer } from 'http';
 import { Server as SocketServer } from 'socket.io';
 import dotenv from 'dotenv';
 
-import callsRouter from './routes/calls';
-import customersRouter from './routes/customers';
-import appointmentsRouter from './routes/appointments';
-import knowledgeRouter from './routes/knowledge';
+import { PrismaClient } from '@prisma/client';
+
+import callsRouter from './routes/calls.js';
+import customersRouter from './routes/customer.js';
+import appointmentsRouter from './routes/appointments.js';
+import knowledgeRouter from './routes/knowledge.js';
 
 dotenv.config();
 
 const app = express();
+const prisma = new PrismaClient();
 const server = createServer(app);
 const io = new SocketServer(server, {
   cors: {
-    origin: process.env.CLIENT_URL || 'http://localhost:3000',
+    origin: process.env.CLIENT_URL || 'http://localhost:3777',
     methods: ['GET', 'POST'],
   },
 });
@@ -25,7 +28,7 @@ const io = new SocketServer(server, {
 // Middleware
 app.use(helmet());
 app.use(cors({
-  origin: process.env.CLIENT_URL || 'http://localhost:3000',
+  origin: process.env.CLIENT_URL || 'http://localhost:3777',
   credentials: true,
 }));
 app.use(express.json());
@@ -42,6 +45,56 @@ app.use('/api/calls', callsRouter);
 app.use('/api/customers', customersRouter);
 app.use('/api/appointments', appointmentsRouter);
 app.use('/api/knowledge', knowledgeRouter);
+
+
+
+app.get('/api/stats', async (req, res) => {
+  try {
+    const totalCalls = await prisma.call.count();
+
+    const activeCalls = await prisma.call.count({
+      where: {
+        status: 'active',
+      },
+    });
+
+    const completedCalls = await prisma.call.findMany({
+      where: {
+        status: 'completed',
+      },
+      select: {
+        startedAt: true,
+        endedAt: true,
+      },
+    });
+
+    let averageDuration = 0;
+
+    if (completedCalls.length > 0) {
+      const totalDurationMs = completedCalls.reduce((total, call) => {
+        return total + (
+          call.endedAt!.getTime() - call.startedAt.getTime()
+        );
+      }, 0);
+
+      averageDuration =
+        Math.round(
+          (totalDurationMs / completedCalls.length / 60000) * 10
+        ) / 10;
+    }
+
+    res.json({
+      totalCalls,
+      activeCalls,
+      averageDuration,
+      satisfactionRate: 0,
+    });
+  } catch (error) {
+    console.error('Error fetching stats:', error);
+    res.status(500).json({ error: 'Failed to fetch stats' });
+  }
+});
+
 
 // Health check
 app.get('/health', (req, res) => {
